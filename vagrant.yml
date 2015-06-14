@@ -1,0 +1,52 @@
+---
+- hosts: all
+  sudo: true
+  tasks:
+  
+  - name: Install Docker
+    shell: "wget -qO- https://get.docker.com/ | sh"
+  
+  - name: install apt packages
+    apt: "name='{{ item }}' state=present"
+    with_items:
+      - python-pip
+
+  - name: install docker-py
+    pip: name=docker-py version=1.1.0
+
+  - name: Start cAdvisor
+    docker:
+      name: cadvisor
+      image: google/cadvisor
+      volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      ports:
+      - "8080:8080"
+      restart_policy: always
+      state: reloaded
+      pull: always
+
+  - name: Create /etc/prometheus
+    file: path=/etc/prometheus state=directory mode=0755
+
+  - name: Create prometheus configuration
+    template: src=templates/prometheus.yml.j2 dest=/etc/prometheus/prometheus.yml owner=root group=root mode=0644
+
+  - name: Create prometheus rules
+    copy: src=files/prometheus.rules dest=/etc/prometheus/prometheus.rules owner=root group=root mode=0644
+
+  - name: Start prometheus
+    docker:
+      name: prometheus
+      image: prom/prometheus
+      command: "-config.file=/prometheus-data/prometheus.yml"
+      volumes:
+      - /etc/prometheus:/prometheus-data
+      ports:
+      - "9090:9090"
+      restart_policy: always
+      state: restarted
+      pull: always
